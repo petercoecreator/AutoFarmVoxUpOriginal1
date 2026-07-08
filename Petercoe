@@ -1,0 +1,1315 @@
+--[[
+  VoxUp | Petercoe v10.1
+  Sem Anti-AFK
+]]
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- ================= Referências do personagem =================
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+player.CharacterAdded:Connect(function(novo)
+	character = novo
+	humanoidRootPart = novo:WaitForChild("HumanoidRootPart")
+end)
+
+-- ================= Paleta de Cores =================
+local COLOR = {
+	bgDeep   = Color3.fromRGB(10, 15, 24),
+	panel    = Color3.fromRGB(14, 20, 32),
+	panel2   = Color3.fromRGB(18, 26, 40),
+	line     = Color3.fromRGB(38, 55, 62),
+	teal     = Color3.fromRGB(38, 230, 201),
+	tealBright = Color3.fromRGB(111, 251, 224),
+	violet   = Color3.fromRGB(155, 107, 255),
+	violetBright = Color3.fromRGB(196, 168, 255),
+	text     = Color3.fromRGB(231, 241, 242),
+	textDim  = Color3.fromRGB(124, 139, 150),
+	textFaint = Color3.fromRGB(69, 82, 92),
+	danger   = Color3.fromRGB(255, 85, 102),
+	success  = Color3.fromRGB(53, 224, 138),
+	warning  = Color3.fromRGB(255, 193, 7),
+}
+
+-- ================= Configurações =================
+local CONFIG = {
+	offsetY = 3,
+	tempoEsperaAposTeleporte = 1,
+	tempoSegurarE = 2,
+	pausaEntreCogumelos = 0.5,
+	consoleAtualizar = 2,
+}
+
+-- VOXUP CONFIG
+local VOXUP = {
+	TELEPORT_HEIGHT = 5,
+	TELEPORT_SPEED = 0.3,
+}
+
+-- ================= Estado =================
+local estado = {
+	running = false,
+	cogumelosColetados = 0,
+	totalCogumelos = 0,
+	totalNoMapa = 0,
+	ciclosCompletos = 0,
+	listaCogumelos = {},
+	guiVisivel = true,
+	abaAtiva = "farm",
+}
+
+-- ================= Helpers =================
+local function new(className, props)
+	local inst = Instance.new(className)
+	for k, v in pairs(props) do
+		inst[k] = v
+	end
+	return inst
+end
+
+local function corner(radius, parent)
+	return new("UICorner", { CornerRadius = UDim.new(0, radius), Parent = parent })
+end
+
+local function stroke(parent, color, thickness, transparency)
+	return new("UIStroke", {
+		Color = color,
+		Thickness = thickness or 1,
+		Transparency = transparency or 0,
+		Parent = parent,
+	})
+end
+
+local function tween(obj, props, time, style, dir)
+	local t = TweenService:Create(
+		obj,
+		TweenInfo.new(time or 0.25, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out),
+		props
+	)
+	t:Play()
+	return t
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- PARTE 1: INTRO SPLASH
+-- ═══════════════════════════════════════════════════════════════
+
+local USER_ID = 7719697513
+
+local function criarIntroSplash(onComplete)
+	local splashGui = new("ScreenGui", {
+		Name = "IntroSplash",
+		IgnoreGuiInset = true,
+		DisplayOrder = 999,
+		ResetOnSpawn = false,
+		Parent = playerGui,
+	})
+
+	local overlay = new("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+		BackgroundTransparency = 1,
+		ZIndex = 1,
+		Parent = splashGui,
+	})
+
+	local splash = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(520, 420),
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Parent = splashGui,
+	})
+
+	local splashScale = new("UIScale", { Scale = 0, Parent = splash })
+
+	local ring = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.35, 0),
+		Size = UDim2.fromOffset(210, 210),
+		BackgroundTransparency = 1,
+		Parent = splash,
+	})
+	corner(100, ring)
+	local ringStroke = stroke(ring, COLOR.teal, 4, 1)
+	local ringGradient = new("UIGradient", {
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, COLOR.teal),
+			ColorSequenceKeypoint.new(0.5, COLOR.violet),
+			ColorSequenceKeypoint.new(1, COLOR.teal),
+		}),
+		Parent = ringStroke,
+	})
+	task.spawn(function()
+		while ring.Parent do
+			ringGradient.Rotation = (ringGradient.Rotation + 3) % 360
+			task.wait()
+		end
+	end)
+
+	local avatarFrame = new("ImageLabel", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.35, 0),
+		Size = UDim2.fromOffset(190, 190),
+		BackgroundColor3 = Color3.fromRGB(15, 20, 30),
+		ImageTransparency = 1,
+		ScaleType = Enum.ScaleType.Crop,
+		Parent = splash,
+	})
+	corner(100, avatarFrame)
+	local avatarStroke = stroke(avatarFrame, COLOR.tealBright, 3, 1)
+
+	task.spawn(function()
+		local ok, content = pcall(function()
+			return Players:GetUserThumbnailAsync(USER_ID, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
+		end)
+		if ok and content then
+			avatarFrame.Image = content
+		end
+	end)
+
+	local subtitle = new("TextLabel", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.62, -10),
+		Size = UDim2.fromOffset(400, 34),
+		BackgroundTransparency = 1,
+		Text = "FEITA POR",
+		Font = Enum.Font.GothamBlack,
+		TextSize = 24,
+		TextColor3 = COLOR.text,
+		TextTransparency = 1,
+		Parent = splash,
+	})
+	local subtitleGradient = new("UIGradient", {
+		Color = ColorSequence.new(COLOR.violetBright, COLOR.tealBright),
+		Parent = subtitle,
+	})
+	local subtitleStroke = stroke(subtitle, COLOR.violet, 1.5, 1)
+
+	local title = new("TextLabel", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.78, 10),
+		Size = UDim2.fromOffset(480, 70),
+		BackgroundTransparency = 1,
+		Text = "PETERCOE",
+		Font = Enum.Font.GothamBlack,
+		TextSize = 54,
+		TextColor3 = COLOR.text,
+		TextTransparency = 1,
+		Parent = splash,
+	})
+	local titleGradient = new("UIGradient", {
+		Color = ColorSequence.new(COLOR.tealBright, COLOR.violetBright),
+		Parent = title,
+	})
+	local titleStroke = stroke(title, COLOR.teal, 2, 1)
+
+	local sound = new("Sound", {
+		SoundId = "rbxassetid://12222253",
+		Volume = 1,
+		Parent = splashGui,
+	})
+
+	local function burstParticles()
+		for i = 1, 16 do
+			local angle = math.rad((360 / 16) * i)
+			local dist = math.random(140, 230)
+
+			local dot = new("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.new(0.5, 0, 0.35, 0),
+				Size = UDim2.fromOffset(6, 6),
+				BackgroundColor3 = (i % 2 == 0) and COLOR.teal or COLOR.violet,
+				BackgroundTransparency = 0,
+				ZIndex = 3,
+				Parent = splash,
+			})
+			corner(100, dot)
+
+			local targetX = math.cos(angle) * dist
+			local targetY = math.sin(angle) * dist
+
+			tween(dot, {
+				Position = UDim2.new(0.5, targetX, 0.35, targetY),
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(2, 2),
+			}, math.random(60, 90) / 100, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+			task.delay(1, function()
+				if dot.Parent then dot:Destroy() end
+			end)
+		end
+	end
+
+	task.spawn(function()
+		tween(overlay, { BackgroundTransparency = 0.45 }, 0.35)
+
+		sound:Play()
+		tween(splashScale, { Scale = 1 }, 0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+		task.wait(0.15)
+
+		tween(ringStroke, { Transparency = 0 }, 0.3)
+		tween(avatarFrame, { ImageTransparency = 0 }, 0.4)
+		tween(avatarStroke, { Transparency = 0 }, 0.4)
+		task.wait(0.25)
+
+		burstParticles()
+
+		tween(subtitle, { TextTransparency = 0 }, 0.3)
+		tween(subtitleStroke, { Transparency = 0.2 }, 0.3)
+		task.wait(0.1)
+		tween(title, { TextTransparency = 0 }, 0.35, Enum.EasingStyle.Back)
+		tween(titleStroke, { Transparency = 0.3 }, 0.35)
+
+		task.wait(0.3)
+		for _ = 1, 3 do
+			tween(titleStroke, { Transparency = 0 }, 0.35)
+			tween(subtitleStroke, { Transparency = 0 }, 0.35).Completed:Wait()
+			tween(titleStroke, { Transparency = 0.55 }, 0.35)
+			tween(subtitleStroke, { Transparency = 0.5 }, 0.35).Completed:Wait()
+		end
+
+		task.wait(0.6)
+
+		tween(overlay, { BackgroundTransparency = 1 }, 0.5)
+		tween(splashScale, { Scale = 0.6 }, 0.5, Enum.EasingStyle.Quad)
+		tween(subtitle, { TextTransparency = 1 }, 0.4)
+		tween(subtitleStroke, { Transparency = 1 }, 0.4)
+		tween(title, { TextTransparency = 1 }, 0.4)
+		tween(titleStroke, { Transparency = 1 }, 0.4)
+		tween(avatarFrame, { ImageTransparency = 1 }, 0.4)
+		tween(avatarStroke, { Transparency = 1 }, 0.4)
+		tween(ringStroke, { Transparency = 1 }, 0.4)
+
+		task.wait(0.6)
+		splashGui:Destroy()
+
+		if onComplete then
+			onComplete()
+		end
+	end)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- PARTE 2: FUNÇÕES DE FARM
+-- ═══════════════════════════════════════════════════════════════
+
+local function contarTodosCogumelosNoMapa()
+	local total = 0
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if string.find(string.lower(obj.Name), "mushroom") then
+			total += 1
+		end
+	end
+	return total
+end
+
+local function encontrarCogumelosAlvo()
+	local cogumelos = {}
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		local nomeLower = string.lower(obj.Name)
+		if nomeLower == "mushroom-01" or nomeLower == "mushroom-02" then
+			local pos = nil
+			if obj:IsA("BasePart") then
+				pos = obj.Position
+			elseif obj.Parent and obj.Parent:IsA("BasePart") then
+				pos = obj.Parent.Position
+			else
+				for _, desc in ipairs(obj:GetDescendants()) do
+					if desc:IsA("BasePart") then
+						pos = desc.Position
+						break
+					end
+				end
+			end
+			if pos then
+				table.insert(cogumelos, { nome = obj.Name, posicao = pos, objeto = obj })
+			end
+		end
+	end
+	table.sort(cogumelos, function(a, b) return a.nome < b.nome end)
+	return cogumelos
+end
+
+local function teleportarPara(posicao)
+	if not humanoidRootPart then return end
+	humanoidRootPart.CFrame = CFrame.new(posicao + Vector3.new(0, CONFIG.offsetY, 0))
+end
+
+local function segurarE(duracao)
+	VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+	local inicio = tick()
+	while tick() - inicio < duracao do
+		task.wait(0.1)
+	end
+	VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+end
+
+local function efeitoTeleporte()
+	local p = Instance.new("Part")
+	p.Shape = Enum.PartType.Ball
+	p.Size = Vector3.new(1.5, 1.5, 1.5)
+	p.Position = humanoidRootPart.Position
+	p.Anchored = true
+	p.CanCollide = false
+	p.Color = COLOR.teal
+	p.Material = Enum.Material.Neon
+	p.Transparency = 0.3
+	p.Parent = workspace
+	game:GetService("Debris"):AddItem(p, 0.5)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- PARTE 3: FUNÇÕES VOXUP (TESOUROS)
+-- ═══════════════════════════════════════════════════════════════
+
+local TreasureFolder = nil
+
+local function FindTreasureFolder()
+	local folder = Workspace:FindFirstChild("HiddenTreasures")
+	if folder then return folder end
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj.Name == "HiddenTreasures" and obj:IsA("Folder") then
+			return obj
+		end
+	end
+	return nil
+end
+
+local function GetTreasurePosition(obj)
+	if obj:IsA("BasePart") or obj:IsA("MeshPart") then
+		return obj.Position
+	elseif obj:IsA("Model") then
+		if obj.PrimaryPart then return obj.PrimaryPart.Position end
+		for _, child in ipairs(obj:GetDescendants()) do
+			if child:IsA("BasePart") or child:IsA("MeshPart") then
+				return child.Position
+			end
+		end
+	end
+	return nil
+end
+
+local function CountTreasures()
+	if not TreasureFolder or not TreasureFolder.Parent then
+		TreasureFolder = FindTreasureFolder()
+		if not TreasureFolder then return 0 end
+	end
+	return #TreasureFolder:GetChildren()
+end
+
+local function GetRandomTreasure()
+	if not TreasureFolder or not TreasureFolder.Parent then return nil end
+	local treasures = TreasureFolder:GetChildren()
+	if #treasures == 0 then return nil end
+	
+	local valid = {}
+	for _, obj in ipairs(treasures) do
+		if GetTreasurePosition(obj) then
+			table.insert(valid, obj)
+		end
+	end
+	if #valid == 0 then return nil end
+	return valid[math.random(1, #valid)]
+end
+
+local function TeleportToTreasure(position)
+	if not humanoidRootPart then return false end
+	local targetPos = position + Vector3.new(0, VOXUP.TELEPORT_HEIGHT, 0)
+	local tweenInfo = TweenInfo.new(VOXUP.TELEPORT_SPEED, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(humanoidRootPart, tweenInfo, {CFrame = CFrame.new(targetPos)}):Play()
+	return true
+end
+
+local function TeleportRandomTreasure()
+	local treasure = GetRandomTreasure()
+	if not treasure then return nil end
+	local pos = GetTreasurePosition(treasure)
+	if not pos then return nil end
+	if TeleportToTreasure(pos) then
+		return treasure.Name
+	end
+	return nil
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- PARTE 4: GUI PRINCIPAL COMPACTA
+-- ═══════════════════════════════════════════════════════════════
+
+local function criarAutoFarmGUI()
+	local screenGui = new("ScreenGui", {
+		Name = "VoxUpPetercoe",
+		ResetOnSpawn = false,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		Parent = playerGui,
+	})
+
+	local mainFrame = new("Frame", {
+		Name = "Panel",
+		Size = UDim2.fromOffset(340, 440),
+		Position = UDim2.new(0.5, -170, 0.5, -220),
+		BackgroundColor3 = COLOR.panel,
+		Active = true,
+		Parent = screenGui,
+	})
+	corner(14, mainFrame)
+	local mainStroke = stroke(mainFrame, COLOR.teal, 1.5, 0.5)
+
+	local ringGradient = new("UIGradient", {
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, COLOR.teal),
+			ColorSequenceKeypoint.new(0.4, COLOR.panel),
+			ColorSequenceKeypoint.new(0.65, COLOR.violet),
+			ColorSequenceKeypoint.new(1, COLOR.panel),
+		}),
+		Parent = mainStroke,
+	})
+	task.spawn(function()
+		while mainFrame.Parent do
+			ringGradient.Rotation = (ringGradient.Rotation + 2) % 360
+			task.wait(0.03)
+		end
+	end)
+
+	-- ================= Header Compacto =================
+	local header = new("Frame", {
+		Size = UDim2.new(1, -24, 0, 38),
+		Position = UDim2.fromOffset(12, 12),
+		BackgroundTransparency = 1,
+		Parent = mainFrame,
+	})
+
+	local iconFrame = new("Frame", {
+		Size = UDim2.fromOffset(28, 28),
+		BackgroundColor3 = COLOR.teal,
+		Parent = header,
+	})
+	corner(8, iconFrame)
+	new("UIGradient", {
+		Color = ColorSequence.new(COLOR.teal, COLOR.violet),
+		Rotation = 45,
+		Parent = iconFrame,
+	})
+	new("TextLabel", {
+		Text = "🍄",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		TextScaled = true,
+		Parent = iconFrame,
+	})
+
+	local titleBlock = new("Frame", {
+		Size = UDim2.new(1, -110, 1, 0),
+		Position = UDim2.fromOffset(36, 0),
+		BackgroundTransparency = 1,
+		Parent = header,
+	})
+	new("TextLabel", {
+		Text = "VoxUp | Petercoe",
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		TextColor3 = COLOR.text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(1, 0, 0, 16),
+		BackgroundTransparency = 1,
+		Parent = titleBlock,
+	})
+	new("TextLabel", {
+		Text = "Auto Farm + Teleporte",
+		Font = Enum.Font.Gotham,
+		TextSize = 10,
+		TextColor3 = COLOR.textDim,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(1, 0, 0, 12),
+		Position = UDim2.fromOffset(0, 16),
+		BackgroundTransparency = 1,
+		Parent = titleBlock,
+	})
+
+	-- Pill de status
+	local statusPill = new("Frame", {
+		Size = UDim2.fromOffset(80, 24),
+		Position = UDim2.new(1, -80, 0.5, -12),
+		BackgroundColor3 = COLOR.panel2,
+		Parent = header,
+	})
+	corner(12, statusPill)
+	stroke(statusPill, COLOR.line, 1)
+
+	local statusDot = new("Frame", {
+		Size = UDim2.fromOffset(6, 6),
+		Position = UDim2.fromOffset(8, 9),
+		BackgroundColor3 = COLOR.textFaint,
+		Parent = statusPill,
+	})
+	corner(3, statusDot)
+
+	local statusPillText = new("TextLabel", {
+		Text = "Parado",
+		Font = Enum.Font.GothamMedium,
+		TextSize = 10,
+		TextColor3 = COLOR.textDim,
+		Size = UDim2.new(1, -22, 1, 0),
+		Position = UDim2.fromOffset(20, 0),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		Parent = statusPill,
+	})
+
+	-- ================= ABAS =================
+	local abasFrame = new("Frame", {
+		Size = UDim2.new(1, -24, 0, 30),
+		Position = UDim2.fromOffset(12, 54),
+		BackgroundTransparency = 1,
+		Parent = mainFrame,
+	})
+
+	local abaFarm = new("TextButton", {
+		Text = "🍄 FARM",
+		Size = UDim2.new(0.5, -3, 1, 0),
+		Position = UDim2.fromOffset(0, 0),
+		BackgroundColor3 = COLOR.teal,
+		TextColor3 = Color3.fromRGB(4, 17, 13),
+		Font = Enum.Font.GothamBold,
+		TextSize = 11,
+		AutoButtonColor = false,
+		Parent = abasFrame,
+	})
+	corner(8, abaFarm)
+
+	local abaTesouros = new("TextButton", {
+		Text = "💎 TESOUROS",
+		Size = UDim2.new(0.5, -3, 1, 0),
+		Position = UDim2.new(0.5, 3, 0, 0),
+		BackgroundColor3 = COLOR.panel2,
+		TextColor3 = COLOR.textDim,
+		Font = Enum.Font.GothamBold,
+		TextSize = 11,
+		AutoButtonColor = false,
+		Parent = abasFrame,
+	})
+	corner(8, abaTesouros)
+	stroke(abaTesouros, COLOR.line, 1)
+
+	-- ================= CONTEÚDO DAS ABAS =================
+	local conteudoFrame = new("Frame", {
+		Size = UDim2.new(1, -24, 1, -108),
+		Position = UDim2.fromOffset(12, 90),
+		BackgroundTransparency = 1,
+		Parent = mainFrame,
+	})
+
+	-- === ABA FARM ===
+	local farmFrame = new("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = true,
+		Parent = conteudoFrame,
+	})
+
+	-- Botão Auto Farm
+	local farmBtn = new("TextButton", {
+		Text = "",
+		Size = UDim2.new(1, 0, 0, 40),
+		Position = UDim2.fromOffset(0, 0),
+		BackgroundColor3 = COLOR.teal,
+		AutoButtonColor = false,
+		Parent = farmFrame,
+	})
+	corner(10, farmBtn)
+	new("UIGradient", {
+		Color = ColorSequence.new(COLOR.tealBright, COLOR.teal),
+		Rotation = 90,
+		Parent = farmBtn,
+	})
+
+	local farmBtnText = new("TextLabel", {
+		Text = "▶  INICIAR AUTO FARM",
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		TextColor3 = Color3.fromRGB(4, 17, 13),
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Parent = farmBtn,
+	})
+
+	-- Botão Atualizar (sem Anti-AFK)
+	local refreshBtn = new("TextButton", {
+		Text = "",
+		Size = UDim2.new(1, 0, 0, 30),
+		Position = UDim2.fromOffset(0, 46),
+		BackgroundColor3 = COLOR.panel2,
+		AutoButtonColor = false,
+		Parent = farmFrame,
+	})
+	corner(8, refreshBtn)
+	stroke(refreshBtn, COLOR.line, 1)
+
+	local refreshBtnText = new("TextLabel", {
+		Text = "🔄 Atualizar Lista",
+		Font = Enum.Font.GothamBold,
+		TextSize = 10,
+		TextColor3 = COLOR.text,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Parent = refreshBtn,
+	})
+
+	-- Cards compactos
+	local statsFrame = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 52),
+		Position = UDim2.fromOffset(0, 82),
+		BackgroundTransparency = 1,
+		Parent = farmFrame,
+	})
+
+	local function makeStatCard(size, pos, labelText, valorText, corValor)
+		local card = new("Frame", {
+			Size = size,
+			Position = pos,
+			BackgroundColor3 = COLOR.panel2,
+			Parent = statsFrame,
+		})
+		corner(8, card)
+		stroke(card, COLOR.line, 1)
+
+		new("TextLabel", {
+			Text = labelText,
+			Font = Enum.Font.GothamMedium,
+			TextSize = 8,
+			TextColor3 = COLOR.textDim,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, -10, 0, 12),
+			Position = UDim2.fromOffset(6, 4),
+			BackgroundTransparency = 1,
+			Parent = card,
+		})
+
+		local valor = new("TextLabel", {
+			Text = valorText,
+			Font = Enum.Font.GothamBold,
+			TextSize = 14,
+			TextColor3 = corValor or COLOR.text,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, -10, 0, 20),
+			Position = UDim2.fromOffset(6, 16),
+			BackgroundTransparency = 1,
+			Parent = card,
+		})
+		return valor
+	end
+
+	local statTotalMapa = makeStatCard(
+		UDim2.new(0.32, -3, 1, 0),
+		UDim2.fromOffset(0, 0),
+		"TOTAL",
+		"0",
+		COLOR.violetBright
+	)
+
+	local statAlvos = makeStatCard(
+		UDim2.new(0.32, -3, 1, 0),
+		UDim2.new(0.34, 0, 0, 0),
+		"ALVOS",
+		"0",
+		COLOR.tealBright
+	)
+
+	local statColetados = makeStatCard(
+		UDim2.new(0.32, -3, 1, 0),
+		UDim2.new(0.68, 0, 0, 0),
+		"COLETADOS",
+		"0",
+		COLOR.success
+	)
+
+	-- Console compacto
+	local consoleFrame = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 110),
+		Position = UDim2.fromOffset(0, 140),
+		BackgroundColor3 = COLOR.bgDeep,
+		Parent = farmFrame,
+	})
+	corner(8, consoleFrame)
+	stroke(consoleFrame, COLOR.line, 1)
+
+	new("TextLabel", {
+		Text = "📋 COGUMELOS",
+		Font = Enum.Font.GothamBold,
+		TextSize = 9,
+		TextColor3 = COLOR.tealBright,
+		Size = UDim2.new(1, -16, 0, 16),
+		Position = UDim2.fromOffset(8, 4),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		Parent = consoleFrame,
+	})
+
+	local consoleScroll = new("ScrollingFrame", {
+		Size = UDim2.new(1, -12, 1, -24),
+		Position = UDim2.fromOffset(6, 22),
+		BackgroundTransparency = 1,
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = COLOR.teal,
+		BorderSizePixel = 0,
+		Parent = consoleFrame,
+	})
+
+	local consoleLayout = new("UIListLayout", {
+		Padding = UDim.new(0, 1),
+		Parent = consoleScroll,
+	})
+
+	-- Log compacto
+	local logFrame = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 100),
+		Position = UDim2.fromOffset(0, 246),
+		BackgroundColor3 = COLOR.bgDeep,
+		Parent = farmFrame,
+	})
+	corner(8, logFrame)
+	stroke(logFrame, COLOR.line, 1)
+
+	new("TextLabel", {
+		Text = "📜 LOG",
+		Font = Enum.Font.GothamBold,
+		TextSize = 9,
+		TextColor3 = COLOR.violetBright,
+		Size = UDim2.new(1, -16, 0, 16),
+		Position = UDim2.fromOffset(8, 4),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		Parent = logFrame,
+	})
+
+	local logScroll = new("ScrollingFrame", {
+		Size = UDim2.new(1, -12, 1, -24),
+		Position = UDim2.fromOffset(6, 22),
+		BackgroundTransparency = 1,
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = COLOR.violet,
+		BorderSizePixel = 0,
+		Parent = logFrame,
+	})
+
+	local logLayout = new("UIListLayout", {
+		Padding = UDim.new(0, 1),
+		Parent = logScroll,
+	})
+
+	-- === ABA TESOUROS ===
+	local tesourosFrame = new("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = conteudoFrame,
+	})
+
+	-- Contador de tesouros
+	local tesouroCounterCard = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 80),
+		Position = UDim2.fromOffset(0, 0),
+		BackgroundColor3 = COLOR.panel2,
+		Parent = tesourosFrame,
+	})
+	corner(10, tesouroCounterCard)
+	stroke(tesouroCounterCard, COLOR.line, 1)
+
+	new("TextLabel", {
+		Text = "💎 TESOUROS NO MAPA",
+		Font = Enum.Font.GothamBold,
+		TextSize = 10,
+		TextColor3 = COLOR.tealBright,
+		Size = UDim2.new(1, -16, 0, 16),
+		Position = UDim2.fromOffset(10, 6),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		Parent = tesouroCounterCard,
+	})
+
+	local tesouroCounterValor = new("TextLabel", {
+		Text = "0",
+		Font = Enum.Font.GothamBlack,
+		TextSize = 32,
+		TextColor3 = COLOR.violetBright,
+		Size = UDim2.new(1, -16, 0, 40),
+		Position = UDim2.fromOffset(10, 22),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		Parent = tesouroCounterCard,
+	})
+
+	new("TextLabel", {
+		Text = "HiddenTreasures",
+		Font = Enum.Font.Gotham,
+		TextSize = 9,
+		TextColor3 = COLOR.textDim,
+		Size = UDim2.new(1, -16, 0, 14),
+		Position = UDim2.fromOffset(10, 60),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		Parent = tesouroCounterCard,
+	})
+
+	-- Botão Teleporte Aleatório
+	local voxupTeleportBtn = new("TextButton", {
+		Text = "",
+		Size = UDim2.new(1, 0, 0, 44),
+		Position = UDim2.fromOffset(0, 90),
+		BackgroundColor3 = Color3.fromRGB(0, 150, 80),
+		AutoButtonColor = false,
+		Parent = tesourosFrame,
+	})
+	corner(10, voxupTeleportBtn)
+	new("UIGradient", {
+		Color = ColorSequence.new(Color3.fromRGB(0, 200, 100), Color3.fromRGB(0, 150, 80)),
+		Rotation = 90,
+		Parent = voxupTeleportBtn,
+	})
+
+	local voxupTeleportText = new("TextLabel", {
+		Text = "🎲 TELEPORTAR ALEATÓRIO",
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Parent = voxupTeleportBtn,
+	})
+
+	-- Status
+	local voxupStatus = new("TextLabel", {
+		Text = "Pronto para teleportar",
+		Font = Enum.Font.GothamMedium,
+		TextSize = 10,
+		TextColor3 = COLOR.textDim,
+		Size = UDim2.new(1, 0, 0, 18),
+		Position = UDim2.fromOffset(0, 140),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundTransparency = 1,
+		Parent = tesourosFrame,
+	})
+
+	-- ================= FUNÇÕES DO LOG =================
+	local function adicionarLog(texto, cor)
+		cor = cor or COLOR.textDim
+		local hora = os.date("%H:%M:%S")
+
+		local logItem = new("TextLabel", {
+			Text = "[" .. hora .. "] " .. texto,
+			Font = Enum.Font.Gotham,
+			TextSize = 9,
+			TextColor3 = cor,
+			Size = UDim2.new(1, -8, 0, 14),
+			BackgroundTransparency = 1,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Parent = logScroll,
+		})
+
+		local logs = {}
+		for _, child in ipairs(logScroll:GetChildren()) do
+			if child:IsA("TextLabel") then
+				table.insert(logs, child)
+			end
+		end
+		if #logs > 15 then
+			logs[1]:Destroy()
+		end
+
+		logScroll.CanvasSize = UDim2.new(0, 0, 0, logLayout.AbsoluteContentSize.Y + 5)
+		task.delay(0.1, function()
+			logScroll.CanvasPosition = Vector2.new(0, logScroll.AbsoluteCanvasSize.Y)
+		end)
+	end
+
+	-- ================= FUNÇÕES DO CONSOLE =================
+	local function atualizarConsole()
+		for _, child in ipairs(consoleScroll:GetChildren()) do
+			if child:IsA("TextLabel") then
+				child:Destroy()
+			end
+		end
+
+		local totalNoMapa = contarTodosCogumelosNoMapa()
+		estado.totalNoMapa = totalNoMapa
+		statTotalMapa.Text = tostring(totalNoMapa)
+
+		local cogumelos = encontrarCogumelosAlvo()
+		estado.listaCogumelos = cogumelos
+		estado.totalCogumelos = #cogumelos
+		statAlvos.Text = tostring(estado.totalCogumelos)
+
+		new("TextLabel", {
+			Text = "📊 Total: " .. totalNoMapa .. "  |  Alvos: " .. #cogumelos,
+			Font = Enum.Font.GothamBold,
+			TextSize = 9,
+			TextColor3 = COLOR.violetBright,
+			Size = UDim2.new(1, -8, 0, 14),
+			BackgroundTransparency = 1,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Parent = consoleScroll,
+		})
+
+		if #cogumelos == 0 then
+			new("TextLabel", {
+				Text = "Nenhum alvo encontrado",
+				Font = Enum.Font.Gotham,
+				TextSize = 9,
+				TextColor3 = COLOR.danger,
+				Size = UDim2.new(1, -8, 0, 14),
+				BackgroundTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = consoleScroll,
+			})
+		else
+			for i, cog in ipairs(cogumelos) do
+				new("TextLabel", {
+					Text = string.format("🎯 %d. %s", i, cog.nome),
+					Font = Enum.Font.Gotham,
+					TextSize = 9,
+					TextColor3 = COLOR.tealBright,
+					Size = UDim2.new(1, -8, 0, 14),
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Parent = consoleScroll,
+				})
+			end
+		end
+
+		consoleScroll.CanvasSize = UDim2.new(0, 0, 0, consoleLayout.AbsoluteContentSize.Y + 5)
+	end
+
+	task.spawn(function()
+		while true do
+			atualizarConsole()
+			task.wait(CONFIG.consoleAtualizar)
+		end
+	end)
+
+	-- Atualizar contador de tesouros
+	task.spawn(function()
+		while tesouroCounterValor.Parent do
+			local count = CountTreasures()
+			tesouroCounterValor.Text = tostring(count)
+			task.wait(0.5)
+		end
+	end)
+
+	-- ================= LÓGICA DO AUTO FARM =================
+	local heartbeatConn = nil
+
+	local function setRunning(state)
+		estado.running = state
+
+		if estado.running then
+			tween(farmBtn, { BackgroundColor3 = COLOR.danger }, 0.25)
+			farmBtnText.Text = "■  PARAR AUTO FARM"
+			farmBtnText.TextColor3 = Color3.fromRGB(42, 10, 13)
+
+			tween(statusPill, { BackgroundColor3 = Color3.fromRGB(20, 40, 32) }, 0.25)
+			statusPillText.Text = "Rodando"
+			statusPillText.TextColor3 = COLOR.success
+			tween(statusDot, { BackgroundColor3 = COLOR.success }, 0.25)
+
+			adicionarLog("Auto Farm INICIADO", COLOR.success)
+
+			heartbeatConn = RunService.Heartbeat:Connect(function() end)
+
+			task.spawn(function()
+				while estado.running do
+					local cogumelos = encontrarCogumelosAlvo()
+					atualizarConsole()
+
+					if #cogumelos == 0 then
+						adicionarLog("Nenhum alvo encontrado", COLOR.danger)
+						task.wait(3)
+						continue
+					end
+
+					for i, cog in ipairs(cogumelos) do
+						if not estado.running then break end
+
+						teleportarPara(cog.posicao)
+						efeitoTeleporte()
+
+						task.wait(CONFIG.tempoEsperaAposTeleporte)
+
+						if not estado.running then break end
+
+						segurarE(CONFIG.tempoSegurarE)
+
+						if not estado.running then break end
+
+						estado.cogumelosColetados += 1
+						statColetados.Text = tostring(estado.cogumelosColetados)
+
+						adicionarLog("Coletado: " .. cog.nome, COLOR.success)
+
+						task.wait(CONFIG.pausaEntreCogumelos)
+					end
+
+					if estado.running then
+						estado.ciclosCompletos += 1
+						adicionarLog("Ciclo " .. estado.ciclosCompletos .. " completo!", COLOR.warning)
+						task.wait(1)
+					end
+				end
+
+				if heartbeatConn then
+					heartbeatConn:Disconnect()
+					heartbeatConn = nil
+				end
+			end)
+
+		else
+			tween(farmBtn, { BackgroundColor3 = COLOR.teal }, 0.25)
+			farmBtnText.Text = "▶  INICIAR AUTO FARM"
+			farmBtnText.TextColor3 = Color3.fromRGB(4, 17, 13)
+
+			tween(statusPill, { BackgroundColor3 = COLOR.panel2 }, 0.25)
+			statusPillText.Text = "Parado"
+			statusPillText.TextColor3 = COLOR.textDim
+			tween(statusDot, { BackgroundColor3 = COLOR.textFaint }, 0.25)
+
+			adicionarLog("Auto Farm PARADO", COLOR.danger)
+
+			if heartbeatConn then
+				heartbeatConn:Disconnect()
+				heartbeatConn = nil
+			end
+
+			VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+		end
+	end
+
+	-- Eventos dos botões
+	farmBtn.MouseButton1Click:Connect(function()
+		setRunning(not estado.running)
+	end)
+
+	refreshBtn.MouseButton1Click:Connect(function()
+		atualizarConsole()
+		adicionarLog("Lista atualizada", COLOR.tealBright)
+	end)
+
+	-- Botão Voxup Teleporte
+	voxupTeleportBtn.MouseButton1Click:Connect(function()
+		local count = CountTreasures()
+		if count == 0 then
+			voxupTeleportText.Text = "❌ SEM TESOUROS!"
+			voxupTeleportBtn.BackgroundColor3 = COLOR.danger
+			voxupStatus.Text = "Aguardando tesouros..."
+			voxupStatus.TextColor3 = COLOR.danger
+			task.wait(2)
+			voxupTeleportText.Text = "🎲 TELEPORTAR ALEATÓRIO"
+			voxupTeleportBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+			voxupStatus.Text = "Pronto para teleportar"
+			voxupStatus.TextColor3 = COLOR.textDim
+			return
+		end
+
+		voxupTeleportText.Text = "🔄 TELEPORTANDO..."
+		voxupTeleportBtn.BackgroundColor3 = COLOR.warning
+		voxupStatus.Text = "Procurando tesouro..."
+		voxupStatus.TextColor3 = COLOR.warning
+
+		local name = TeleportRandomTreasure()
+
+		if name then
+			voxupTeleportText.Text = "✅ " .. name:upper()
+			voxupTeleportBtn.BackgroundColor3 = COLOR.success
+			voxupStatus.Text = "Teleportado!"
+			voxupStatus.TextColor3 = COLOR.success
+			adicionarLog("Teleportado: " .. name, COLOR.success)
+		else
+			voxupTeleportText.Text = "❌ FALHA"
+			voxupTeleportBtn.BackgroundColor3 = COLOR.danger
+			voxupStatus.Text = "Tente novamente"
+			voxupStatus.TextColor3 = COLOR.danger
+		end
+
+		task.wait(2)
+		voxupTeleportText.Text = "🎲 TELEPORTAR ALEATÓRIO"
+		voxupTeleportBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+		voxupStatus.Text = "Pronto para teleportar"
+		voxupStatus.TextColor3 = COLOR.textDim
+	end)
+
+	-- ================= TROCAR ABAS =================
+	local function mostrarAba(aba)
+		if aba == "farm" then
+			estado.abaAtiva = "farm"
+			farmFrame.Visible = true
+			tesourosFrame.Visible = false
+
+			tween(abaFarm, { BackgroundColor3 = COLOR.teal }, 0.2)
+			abaFarm.TextColor3 = Color3.fromRGB(4, 17, 13)
+
+			tween(abaTesouros, { BackgroundColor3 = COLOR.panel2 }, 0.2)
+			abaTesouros.TextColor3 = COLOR.textDim
+		else
+			estado.abaAtiva = "tesouros"
+			farmFrame.Visible = false
+			tesourosFrame.Visible = true
+
+			tween(abaFarm, { BackgroundColor3 = COLOR.panel2 }, 0.2)
+			abaFarm.TextColor3 = COLOR.textDim
+
+			tween(abaTesouros, { BackgroundColor3 = COLOR.violet }, 0.2)
+			abaTesouros.TextColor3 = Color3.fromRGB(255, 255, 255)
+		end
+	end
+
+	abaFarm.MouseButton1Click:Connect(function()
+		mostrarAba("farm")
+	end)
+
+	abaTesouros.MouseButton1Click:Connect(function()
+		mostrarAba("tesouros")
+	end)
+
+	-- ================= Rodapé =================
+	local footer = new("Frame", {
+		Size = UDim2.new(1, -24, 0, 20),
+		Position = UDim2.fromOffset(12, 414),
+		BackgroundTransparency = 1,
+		Parent = mainFrame,
+	})
+	new("Frame", { Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = COLOR.line, Parent = footer })
+	local footStatus = new("TextLabel", {
+		Text = "Script carregado com sucesso!",
+		Font = Enum.Font.GothamMedium,
+		TextSize = 9,
+		TextColor3 = COLOR.textFaint,
+		Size = UDim2.new(1, 0, 0, 16),
+		Position = UDim2.fromOffset(0, 4),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundTransparency = 1,
+		Parent = footer,
+	})
+
+	-- ================= Painel arrastável =================
+	local draggingPanel = false
+	local dragInput
+	local dragStart
+	local startPos
+
+	local function updatePanelDrag(input)
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(
+			startPos.X.Scale, startPos.X.Offset + delta.X,
+			startPos.Y.Scale, startPos.Y.Offset + delta.Y
+		)
+	end
+
+	header.Active = true
+	header.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			draggingPanel = true
+			dragStart = input.Position
+			startPos = mainFrame.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					draggingPanel = false
+				end
+			end)
+		end
+	end)
+
+	header.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and draggingPanel then
+			updatePanelDrag(input)
+		end
+	end)
+
+	-- ================= MINIMIZAR TUDO COM CTRL =================
+	local notificacaoToggle = nil
+
+	local function mostrarNotificacao(texto)
+		if notificacaoToggle and notificacaoToggle.Parent then
+			notificacaoToggle:Destroy()
+		end
+
+		notificacaoToggle = new("TextLabel", {
+			Text = texto,
+			Font = Enum.Font.GothamBold,
+			TextSize = 13,
+			TextColor3 = COLOR.text,
+			BackgroundColor3 = COLOR.panel2,
+			Size = UDim2.fromOffset(260, 32),
+			Position = UDim2.new(0.5, -130, 0, 16),
+			TextXAlignment = Enum.TextXAlignment.Center,
+			ZIndex = 100,
+			Parent = screenGui,
+		})
+		corner(8, notificacaoToggle)
+		stroke(notificacaoToggle, COLOR.teal, 1.5)
+
+		tween(notificacaoToggle, { TextTransparency = 0, BackgroundTransparency = 0 }, 0.2)
+		task.delay(1.5, function()
+			if notificacaoToggle and notificacaoToggle.Parent then
+				tween(notificacaoToggle, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.3).Completed:Wait()
+				notificacaoToggle:Destroy()
+			end
+		end)
+	end
+
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+			estado.guiVisivel = not estado.guiVisivel
+
+			if estado.guiVisivel then
+				mainFrame.Visible = true
+				tween(mainFrame, { Position = UDim2.new(0.5, -170, 0.5, -220) }, 0.3, Enum.EasingStyle.Back)
+				mostrarNotificacao("🔼 GUI Restaurado")
+			else
+				tween(mainFrame, { Position = UDim2.new(0.5, -170, 1.5, 0) }, 0.3, Enum.EasingStyle.Quad).Completed:Connect(function()
+					mainFrame.Visible = false
+				end)
+				mostrarNotificacao("🔽 GUI Minimizado (CTRL)")
+			end
+		end
+	end)
+
+	-- ================= INICIALIZAÇÃO =================
+	atualizarConsole()
+
+	print("🍄🗺️ VoxUp | Petercoe v10.1 - Carregado!")
+	print("   Aba FARM: Mushroom-01 e Mushroom-02")
+	print("   Aba TESOUROS: Teleporte aleatório")
+	print("   Minimizar: CTRL")
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- EXECUÇÃO
+-- ═══════════════════════════════════════════════════════════════
+
+criarIntroSplash(function()
+	criarAutoFarmGUI()
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- LOADSTRING ADICIONAL (TAB+)
+-- ═══════════════════════════════════════════════════════════════
+
+pcall(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/petercoecreator/tab-script/refs/heads/main/TAB%2B"))()
+end)
