@@ -1,6 +1,6 @@
 --[[
-  VoxUp | Petercoe v10.2
-  Correção: Log overflow ajustado
+  VoxUp | Petercoe v10.3
+  Tecla de minimizar: K (antiga: CTRL)
 ]]
 
 local Players = game:GetService("Players")
@@ -770,10 +770,10 @@ local function criarAutoFarmGUI()
 		Parent = consoleScroll,
 	})
 
-	-- Log compacto - CORREÇÃO PRINCIPAL AQUI
+	-- Log compacto
 	local logFrame = new("Frame", {
-		Size = UDim2.new(1, 0, 0, 88),  -- REDUZIDO de 100 para 88
-		Position = UDim2.fromOffset(0, 234),  -- AJUSTADO de 246 para 234
+		Size = UDim2.new(1, 0, 0, 88),
+		Position = UDim2.fromOffset(0, 234),
 		BackgroundColor3 = COLOR.bgDeep,
 		Parent = farmFrame,
 	})
@@ -913,7 +913,7 @@ local function criarAutoFarmGUI()
 			Size = UDim2.new(1, -8, 0, 14),
 			BackgroundTransparency = 1,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTruncate = Enum.TextTruncate.AtEnd,  -- CORREÇÃO: Trunca texto longo
+			TextTruncate = Enum.TextTruncate.AtEnd,
 			Parent = logScroll,
 		})
 
@@ -1240,7 +1240,7 @@ local function criarAutoFarmGUI()
 		end
 	end)
 
-	-- ================= MINIMIZAR TUDO COM CTRL =================
+	-- ================= MINIMIZAR TUDO COM K =================
 	local notificacaoToggle = nil
 
 	local function mostrarNotificacao(texto)
@@ -1274,7 +1274,8 @@ local function criarAutoFarmGUI()
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then return end
-		if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+		-- MUDANÇA: Tecla alterada de CTRL para K
+		if input.KeyCode == Enum.KeyCode.K then
 			estado.guiVisivel = not estado.guiVisivel
 
 			if estado.guiVisivel then
@@ -1285,7 +1286,7 @@ local function criarAutoFarmGUI()
 				tween(mainFrame, { Position = UDim2.new(0.5, -170, 1.5, 0) }, 0.3, Enum.EasingStyle.Quad).Completed:Connect(function()
 					mainFrame.Visible = false
 				end)
-				mostrarNotificacao("🔽 GUI Minimizado (CTRL)")
+				mostrarNotificacao("🔽 GUI Minimizado (K)")
 			end
 		end
 	end)
@@ -1293,10 +1294,10 @@ local function criarAutoFarmGUI()
 	-- ================= INICIALIZAÇÃO =================
 	atualizarConsole()
 
-	print("🍄🗺️ VoxUp | Petercoe v10.2 - Carregado!")
+	print("🍄🗺️ VoxUp | Petercoe v10.3 - Carregado!")
 	print("   Aba FARM: Mushroom-01 e Mushroom-02")
 	print("   Aba TESOUROS: Teleporte aleatório")
-	print("   Minimizar: CTRL")
+	print("   Minimizar: K")
 	print("   Fix: Log overflow corrigido!")
 end
 
