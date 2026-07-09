@@ -1,6 +1,6 @@
 --[[
-  VoxUp | Petercoe v10.1
-  Sem Anti-AFK
+  VoxUp | Petercoe v10.2
+  Correção: Log overflow ajustado
 ]]
 
 local Players = game:GetService("Players")
@@ -735,7 +735,7 @@ local function criarAutoFarmGUI()
 
 	-- Console compacto
 	local consoleFrame = new("Frame", {
-		Size = UDim2.new(1, 0, 0, 110),
+		Size = UDim2.new(1, 0, 0, 90),
 		Position = UDim2.fromOffset(0, 140),
 		BackgroundColor3 = COLOR.bgDeep,
 		Parent = farmFrame,
@@ -770,10 +770,10 @@ local function criarAutoFarmGUI()
 		Parent = consoleScroll,
 	})
 
-	-- Log compacto
+	-- Log compacto - CORREÇÃO PRINCIPAL AQUI
 	local logFrame = new("Frame", {
-		Size = UDim2.new(1, 0, 0, 100),
-		Position = UDim2.fromOffset(0, 246),
+		Size = UDim2.new(1, 0, 0, 88),  -- REDUZIDO de 100 para 88
+		Position = UDim2.fromOffset(0, 234),  -- AJUSTADO de 246 para 234
 		BackgroundColor3 = COLOR.bgDeep,
 		Parent = farmFrame,
 	})
@@ -913,6 +913,7 @@ local function criarAutoFarmGUI()
 			Size = UDim2.new(1, -8, 0, 14),
 			BackgroundTransparency = 1,
 			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,  -- CORREÇÃO: Trunca texto longo
 			Parent = logScroll,
 		})
 
@@ -1292,10 +1293,11 @@ local function criarAutoFarmGUI()
 	-- ================= INICIALIZAÇÃO =================
 	atualizarConsole()
 
-	print("🍄🗺️ VoxUp | Petercoe v10.1 - Carregado!")
+	print("🍄🗺️ VoxUp | Petercoe v10.2 - Carregado!")
 	print("   Aba FARM: Mushroom-01 e Mushroom-02")
 	print("   Aba TESOUROS: Teleporte aleatório")
 	print("   Minimizar: CTRL")
+	print("   Fix: Log overflow corrigido!")
 end
 
 -- ═══════════════════════════════════════════════════════════════
